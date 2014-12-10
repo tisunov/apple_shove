@@ -1,3 +1,6 @@
+require "active_support/core_ext"
+require "active_support/json"
+
 module AppleShove
   class Notification
 
@@ -24,18 +27,24 @@ module AppleShove
       clean_instance_variables.each { |k| hash[k] = self.send(k) }
       hash.to_json(*a)
     end
-    
+
+    def payload_size
+      packaged_message.bytesize
+    end
+
+    def packaged_token
+      [@device_token.gsub(/[\s|<|>]/,'')].pack('H*')
+    end
+
+    def packaged_message
+      @packaged_message ||= ActiveSupport::JSON::encode(@payload)
+    end
+
     # Apple APNS format
     def binary_message
-      payload_json  = @payload.to_json
-      
-      frame = [ [ 1, 32,                  @device_token         ].pack('CnH64'),
-                [ 2, payload_json.length, payload_json          ].pack('Cna*'),
-                [ 3, 4,                   ''                    ].pack('CnA4'),
-                [ 4, 4,                   @expiration_date.to_i ].pack('CnN'),
-                [ 5, 1,                   @priority             ].pack('CnC')     ].join
-
-      [ 2, frame.length, frame ].pack('CNa*')
+      pt = packaged_token
+      pm = packaged_message
+      [0, 0, 32, pt, 0, payload_size, pm].pack("ccca*cca*")
     end
     
     private
